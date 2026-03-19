@@ -4,7 +4,13 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "ts-node-dev --respawn --transpile-only src/api/server.ts",
+    "worker": "ts-node-dev --respawn --transpile-only src/worker/worker.ts",
+    "build": "tsc",
+    "start": "node dist/src/api/server.js",
+    "drizzle:generate": "drizzle-kit generate",
+    "drizzle:migrate": "drizzle-kit migrate"
   },
   "keywords": [],
   "author": "",
@@ -12,6 +18,7 @@
   "type": "commonjs",
   "dependencies": {
     "bullmq": "^5.71.0",
+    "dotenv": "^17.3.1",
     "drizzle-orm": "^0.45.1",
     "express": "^5.2.1",
     "ioredis": "^5.10.0",
@@ -20,6 +27,7 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^25.5.0",
+    "@types/pg": "^8.18.0",
     "drizzle-kit": "^0.31.10",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
