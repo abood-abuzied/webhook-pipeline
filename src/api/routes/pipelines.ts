@@ -6,6 +6,23 @@ import { generateSourcePath } from '../../services/pipeline';
 
 const router = Router();
 
+const ALLOWED_ACTIONS = ['add_timestamp', 'uppercase_keys', 'filter_required_field'];
+
+/**
+ * Validate URL format
+ */
+function isValidUrl(url: string): boolean {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * POST /pipelines - Create a new pipeline
+ */
 router.post('/', async (req, res) => {
   try {
     const { name, actionType, subscribers: subscriberUrls } = req.body as {
@@ -14,13 +31,31 @@ router.post('/', async (req, res) => {
       subscribers?: string[];
     };
 
-    if (!name || !actionType) {
-      return res.status(400).json({ error: 'name and actionType are required' });
+    // Validation
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      return res.status(400).json({ error: 'name is required and must be a non-empty string' });
     }
 
-    const allowedActions = ['add_timestamp', 'uppercase_keys', 'filter_required_field'];
-    if (!allowedActions.includes(actionType)) {
-      return res.status(400).json({ error: 'invalid actionType' });
+    if (!actionType || typeof actionType !== 'string') {
+      return res.status(400).json({ error: 'actionType is required and must be a string' });
+    }
+
+    if (!ALLOWED_ACTIONS.includes(actionType)) {
+      return res.status(400).json({
+        error: `invalid actionType. Allowed values: ${ALLOWED_ACTIONS.join(', ')}`,
+      });
+    }
+
+    if (subscriberUrls !== undefined) {
+      if (!Array.isArray(subscriberUrls)) {
+        return res.status(400).json({ error: 'subscribers must be an array' });
+      }
+
+      for (const url of subscriberUrls) {
+        if (typeof url !== 'string' || !isValidUrl(url)) {
+          return res.status(400).json({ error: `invalid subscriber URL: ${url}` });
+        }
+      }
     }
 
     const sourcePath = generateSourcePath();
@@ -28,7 +63,7 @@ router.post('/', async (req, res) => {
     const insertedPipelines = await db
       .insert(pipelines)
       .values({
-        name,
+        name: name.trim(),
         actionType,
         sourcePath,
       })
@@ -65,6 +100,9 @@ router.post('/', async (req, res) => {
   }
 });
 
+/**
+ * GET /pipelines - List all pipelines
+ */
 router.get('/', async (_req, res) => {
   try {
     const allPipelines = await db.select().from(pipelines);
@@ -75,9 +113,17 @@ router.get('/', async (_req, res) => {
   }
 });
 
+/**
+ * GET /pipelines/:id - Get a specific pipeline with subscribers
+ */
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+
+    // Validate UUID format
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return res.status(400).json({ error: 'invalid pipeline ID format' });
+    }
 
     const pipelineRows = await db
       .select()
@@ -101,59 +147,6 @@ router.get('/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Get pipeline error:', error);
-    return res.status(500).json({ error: 'internal server error' });
-  }
-});
-
-router.patch('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, actionType } = req.body as {
-      name?: string;
-      actionType?: string;
-    };
-
-    const existing = await db
-      .select()
-      .from(pipelines)
-      .where(eq(pipelines.id, id));
-
-    if (!existing[0]) {
-      return res.status(404).json({ error: 'pipeline not found' });
-    }
-
-    const updated = await db
-      .update(pipelines)
-      .set({
-        ...(name ? { name } : {}),
-        ...(actionType ? { actionType } : {}),
-      })
-      .where(eq(pipelines.id, id))
-      .returning();
-
-    return res.json(updated[0]);
-  } catch (error) {
-    console.error('Update pipeline error:', error);
-    return res.status(500).json({ error: 'internal server error' });
-  }
-});
-
-router.delete('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const deleted = await db
-      .delete(pipelines)
-      .where(eq(pipelines.id, id))
-      .returning();
-
-    if (!deleted[0]) {
-      return res.status(404).json({ error: 'pipeline not found' });
-    }
-
-    return res.status(204).send();
-  } catch (error) {
-    console.error('Delete pipeline error:', error);
     return res.status(500).json({ error: 'internal server error' });
   }
 });

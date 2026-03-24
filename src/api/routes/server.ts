@@ -4,11 +4,27 @@ import { eq } from 'drizzle-orm';
 import { db } from '../../db';
 import { jobs, pipelines } from '../../db/schema';
 import { webhookQueue } from '../../queue';
-import pipelineRoutes from '.././routes/pipelines';
-import jobsRoutes from '.././routes/jobs';
+import pipelineRoutes from './pipelines';
+import jobsRoutes from './jobs';
+import deliveriesRoutes from './deliveries';
 
 const app = express();
 app.use(express.json());
+
+app.get('/', (_req, res) => {
+  res.json({
+    name: 'Webhook-Driven Task Processing Pipeline',
+    version: '1.0.0',
+    status: 'operational',
+    endpoints: {
+      health: 'GET /health',
+      pipelines: 'GET/POST /pipelines',
+      jobs: 'GET/POST /jobs',
+      deliveries: 'GET /deliveries',
+      webhooks: 'POST /webhooks/:sourcePath',
+    },
+  });
+});
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
@@ -16,10 +32,25 @@ app.get('/health', (_req, res) => {
 
 app.use('/pipelines', pipelineRoutes);
 app.use('/jobs', jobsRoutes);
+app.use('/deliveries', deliveriesRoutes);
 
 app.post('/webhooks/:sourcePath', async (req, res) => {
   try {
     const { sourcePath } = req.params;
+
+    // Validate sourcePath
+    if (!sourcePath || typeof sourcePath !== 'string' || sourcePath.trim().length === 0) {
+      return res.status(400).json({
+        error: 'invalid sourcePath',
+      });
+    }
+
+    // Validate payload is present
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({
+        error: 'request body must be a JSON object',
+      });
+    }
 
     const pipelineRows = await db
       .select()
@@ -45,9 +76,16 @@ app.post('/webhooks/:sourcePath', async (req, res) => {
 
     const createdJob = insertedJobs[0];
 
-    await webhookQueue.add('process-webhook', {
-      jobId: createdJob.id,
-    });
+    try {
+      await webhookQueue.add('process-webhook', {
+        jobId: createdJob.id,
+      });
+    } catch (queueError) {
+      console.error('Failed to queue job:', queueError);
+      return res.status(503).json({
+        error: 'service unavailable - queue service failed',
+      });
+    }
 
     return res.status(202).json({
       message: 'Webhook accepted and queued',
