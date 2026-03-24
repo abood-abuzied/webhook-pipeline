@@ -5,6 +5,7 @@ import { db } from '../../db';
 import { jobs, pipelines } from '../../db/schema';
 import { webhookQueue } from '../../queue';
 import pipelineRoutes from '.././routes/pipelines';
+import jobsRoutes from '.././routes/jobs';
 
 const app = express();
 app.use(express.json());
@@ -14,6 +15,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/pipelines', pipelineRoutes);
+app.use('/jobs', jobsRoutes);
 
 app.post('/webhooks/:sourcePath', async (req, res) => {
   try {
